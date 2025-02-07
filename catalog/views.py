@@ -6,7 +6,7 @@ from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import UpdateView, DeleteView, CreateView
 from django.urls import reverse, reverse_lazy
 
-from .forms import ProductForm
+from .forms import ProductForm, ProductModeratorForm
 from .models import Product
 
 
@@ -54,12 +54,27 @@ class ProductUpdateView(LoginRequiredMixin, UpdateView):
     def get_success_url(self):
         return reverse("catalog:product", args=[self.kwargs.get("pk")])
 
+    def get_form_class(self):
+        user = self.request.user
+        if user == self.object.owner:
+            return ProductForm
+        elif user.has_perm("catalog.can_unpublish_product"):
+            return ProductModeratorForm
+
 
 class ProductDeleteView(LoginRequiredMixin, DeleteView, PermissionRequiredMixin):
     model = Product
     success_url = reverse_lazy("catalog:products_list")
 
     permission_required = 'catalog.delete_product'
+
+    def post(self, request, pk):
+        product = get_object_or_404(Product, id=pk)
+        if request.user == product.owner or request.user.has_perm("catalog.delete_product"):
+            product.delete()
+            return redirect(reverse("catalog:home"))
+        else:
+            return HttpResponseForbidden("У Вас нет прав на удаление продукта!")
 
 
 class UnpublishProductView(LoginRequiredMixin, View):
